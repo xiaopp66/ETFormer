@@ -10,5 +10,6 @@ Dataset I ACDC
 
 Dataset II The Synapse multi-organ CT dataset
 
-Dataset III Brain_tumor
+Dataset III Heart
+
 
