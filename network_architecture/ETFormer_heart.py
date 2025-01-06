@@ -232,19 +232,6 @@ class UnetrUpBlock(nn.Module):
             depth: int = 3,
             conv_decoder: bool = False,
     ) -> None:
-        """
-        Args:
-            spatial_dims: number of spatial dimensions.
-            in_channels: number of input channels.
-            out_channels: number of output channels.
-            kernel_size: convolution kernel size.
-            upsample_kernel_size: convolution kernel size for transposed convolution layers.
-            norm_name: feature normalization type and arguments.
-            proj_size: projection size for keys and values in the spatial attention module.
-            num_heads: number of heads inside each EPA module.
-            out_size: spatial size for each decoder.
-            depth: number of blocks for the current decoder stage.
-        """
 
         super().__init__()
         upsample_stride = upsample_kernel_size
