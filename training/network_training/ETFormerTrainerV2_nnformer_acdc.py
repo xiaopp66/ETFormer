@@ -21,15 +21,7 @@ import torch
 from ETFormer.training.data_augmentation.data_augmentation_moreDA import get_moreDA_augmentation
 from ETFormer.training.loss_functions.deep_supervision import MultipleOutputLoss2
 from ETFormer.utilities.to_torch import maybe_to_torch, to_cuda
-# from ETFormer.network_architecture.UNETR_PP.acdc_modify.unetr_pp_mulinput_ds_multiresblock_allcbam_para_resbridge_acdc import \
-#     UNETR_PP
-# from ETFormer.network_architecture.EA_ds import UNETR_PP
-from ETFormer.network_architecture.unetr_pp_acdc import UNETR_PP
 from ETFormer.network_architecture.ETFormer_acdc import ETFormer
-# from ETFormer.network_architecture.ETFormer_acdc import ETFormer
-# from ETFormer.network_architecture.ATFormer.vision_transformer import SwinUnet
-# from ETFormer.network_architecture.ATFormer.config import get_config
-# from ETFormer.network_architecture.ATFormer.MISSFormer import MISSFormer
 from ETFormer.network_architecture.initialization import InitWeights_He
 from ETFormer.network_architecture.neural_network import SegmentationNetwork
 from ETFormer.training.data_augmentation.default_data_augmentation import default_2D_augmentation_params, \
@@ -166,53 +158,17 @@ class ETFormerTrainerV2_ETFormer_acdc(ETFormerTrainer):
         Known issue: forgot to set neg_slope=0 in InitWeights_He; should not make a difference though
         :return:
         """
-        # self.network = ETFormer(crop_size=[14, 160, 160],
-        #                         embedding_dim=96,
-        #                         input_channels=1,
-        #                         num_classes=4,
-        #                         conv_op=nn.Conv3d,
-        #                         depths=[2, 2, 2, 2],
-        #                         num_heads=[3, 6, 12, 24],
-        #                         patch_size=[1, 4, 4],
-        #                         window_size=[[3, 5, 5], [3, 5, 5], [7, 10, 10], [3, 5, 5]],
-        #                         down_stride=[[1, 4, 4], [1, 8, 8], [2, 16, 16], [4, 32, 32]],
-        #                         deep_supervision=False)
-        net_conv_kernel_sizes = [[3, 3, 3], [3, 3, 3], [3, 3, 3], [3, 3, 3]]
-        # self.network = ETFormer(crop_size=self.patch_size,
-        #                         embedding_dim=self.embedding_dim,
-        #                         input_channels=self.input_channels,
-        #                         num_classes=self.num_classes,
-        #                         # conv_kernel_sizes=net_conv_kernel_sizes,
-        #                         conv_op=self.conv_op,
-        #                         depths=self.depths,
-        #                         num_heads=self.num_heads,
-        #                         patch_size=self.embedding_patch_size,
-        #                         window_size=self.window_size,
-        #                         down_stride=self.down_stride,
-        #                         deep_supervision=self.deep_supervision)
-        self.network=UNETR_PP(in_channels=self.input_channels,
+    
+        self.network=ETFormer(in_channels=self.input_channels,
                               out_channels=self.num_classes,
                               feature_size=16,
                               num_heads=4,
                               dropout_rate=0.1,
-                              depths=self.depths,
+                              depths=[3,3,3,3],
                               dims=[32, 64, 128, 256],
                               conv_op=self.conv_op,
                               do_ds=True)
-        # print(self.weight_decay)
-        # self.network = MISSFormer(num_classes=self.num_classes)
-
-        # config = get_config()
-        # self.network = SwinUnet(config, num_classes=self.num_classes)
-
-        # self.network = UNETR_PP(in_channels=self.input_channels,
-        #                         out_channels=self.num_classes,
-        #                         feature_size=16,
-        #                         num_heads=4,
-        #                         depths=[3, 3, 3, 3],
-        #                         dims=[32, 64, 128, 256],
-        #                         do_ds=self.deep_supervision,
-        #                         )
+       
         if torch.cuda.is_available():
             self.network.cuda()
         self.network.inference_apply_nonlin = softmax_helper
