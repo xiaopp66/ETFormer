@@ -21,14 +21,12 @@ import torch
 from ETFormer.training.data_augmentation.data_augmentation_moreDA import get_moreDA_augmentation
 from ETFormer.training.loss_functions.deep_supervision import MultipleOutputLoss2
 from ETFormer.utilities.to_torch import maybe_to_torch, to_cuda
-# from ETFormer.network_architecture.UNETR_PP.synapse_modify.unetr_pp_synapse import UNETR_PP
 from ETFormer.network_architecture.ETFormer_heart import ETFormer
 from ETFormer.network_architecture.initialization import InitWeights_He
 from ETFormer.network_architecture.neural_network import SegmentationNetwork
 from ETFormer.training.data_augmentation.default_data_augmentation import default_2D_augmentation_params, \
     get_patch_size, default_3D_augmentation_params
 from ETFormer.training.dataloading.dataset_loading import unpack_dataset
-# from ETFormer.training.network_training.ETFormerTrainer_synapse import ETFormerTrainer_synapse
 from ETFormer.training.network_training.ETFormerTrainerV3 import ETFormerTrainerV3
 from ETFormer.utilities.nd_softmax import softmax_helper
 from sklearn.model_selection import KFold
@@ -36,8 +34,6 @@ from torch import nn
 from torch.cuda.amp import autocast
 from ETFormer.training.learning_rate.poly_lr import poly_lr
 from batchgenerators.utilities.file_and_folder_operations import *
-
-from ETFormer.network_architecture.unetr_pp_heart import UNETR_PP
 
 
 class ETFormerTrainerV2_ETFormer_heart(ETFormerTrainerV3):
@@ -73,7 +69,7 @@ class ETFormerTrainerV2_ETFormer_heart(ETFormerTrainerV3):
         self.num_heads = [6, 12, 24, 48]
         self.embedding_patch_size = [2, 4, 4]
         self.window_size = [4, 4, 8, 4]
-        self.deep_supervision = False
+        self.deep_supervision = True
 
     def initialize(self, training=True, force_load_plans=False):
         """
@@ -166,52 +162,18 @@ class ETFormerTrainerV2_ETFormer_heart(ETFormerTrainerV3):
         :return:
         """
 
-        net_conv_kernel_sizes = [[3, 3, 3], [3, 3, 3], [3, 3, 3], [3, 3, 3]]
-        # self.network = ETFormer(crop_size=self.patch_size,
-        #                         embedding_dim=self.embedding_dim,
-        #                         input_channels=self.input_channels,
-        #                         num_classes=self.num_classes,
-        #                         conv_kernel_sizes=net_conv_kernel_sizes,
-        #                         conv_op=self.conv_op,
-        #                         depths=self.depths,
-        #                         num_heads=self.num_heads,
-        #                         patch_size=self.embedding_patch_size,
-        #                         window_size=self.window_size,
-        #                         deep_supervision=self.deep_supervision)
-
-        self.network = ETFormer(crop_size=self.crop_size,
-                                embedding_dim=self.embedding_dim,
-                                input_channels=self.input_channels,
-                                num_classes=self.num_classes,
-                                conv_op=self.conv_op,
-                                depths=self.depths,
-                                num_heads=self.num_heads,
-                                patch_size=self.embedding_patch_size,
-                                window_size=self.window_size,
-                                deep_supervision=self.deep_supervision)
-        # self.network = UNETR_PP(in_channels=self.input_channels,
-        #                         out_channels=self.num_classes,
-        #                         img_size=self.crop_size,
-        #                         feature_size=16,
-        #                         num_heads=4,
-        #                         depths=[3, 3, 3, 3],
-        #                         dims=[32, 64, 128, 256],
-        #                         do_ds=self.deep_supervision,
-        #                         )
-        # self.network = UNETR(
-        #     in_channels=1,
-        #     out_channels=self.num_classes,
-        #     img_size=self.patch_size,
-        #     feature_size=16,
-        #     hidden_size=768,
-        #     mlp_dim=3072,
-        #     num_heads=12,
-        #     pos_embed='perceptron',
-        #     norm_name='instance',
-        #     conv_block=True,
-        #     res_block=True,
-        #     dropout_rate=0.0,
-        # )
+     
+        
+        self.network = ETFormer(in_channels=self.input_channels,
+                                out_channels=self.num_classes,
+                                img_size=self.crop_size,
+                                feature_size=16,
+                                num_heads=4,
+                                depths=[3, 3, 3, 3],
+                                dims=[32, 64, 128, 256],
+                                do_ds=self.deep_supervision,
+                                )
+       
         if torch.cuda.is_available():
             self.network.cuda()
         self.network.inference_apply_nonlin = softmax_helper
