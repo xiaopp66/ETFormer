@@ -63,7 +63,7 @@ class EfficientTransformerBlock(nn.Module):
             x = x + self.pos_embed
         attn = x + self.gamma * self.mea_block(self.norm(x))
 
-        attn_skip = attn.reshape(B, H, W, D, C).permute(0, 4, 1, 2, 3)  # (B, C, H, W, D)
+        attn_skip = attn.reshape(B, H, W, D, C).permute(0, 4, 1, 2, 3)  
         attn = self.conv51(attn_skip)
         x = attn_skip + self.conv8(attn)
 
@@ -74,9 +74,9 @@ class Mul_External_Attention(nn.Module):
     def __init__(self, input_size, dim, proj_size, num_heads=4, qkv_bias=False, qk_scale=None, attn_drop=0.,
                  proj_drop=0.):
         super().__init__()
-        self.num_heads = num_heads  # 4
+        self.num_heads = num_heads  
         assert dim % num_heads == 0
-        self.trans_dims = nn.Linear(dim, dim, bias=False)  # (32,32)
+        self.trans_dims = nn.Linear(dim, dim, bias=False) 
 
         # 交互q值的映射
         self.E = nn.Linear(dim, dim, bias=qkv_bias)
@@ -90,7 +90,7 @@ class Mul_External_Attention(nn.Module):
         self.linear_3 = nn.Linear(proj_size, input_size)
 
         self.attn_drop = nn.Dropout(attn_drop)
-        self.proj = nn.Linear(dim, int(dim // 2))  # (32,16)
+        self.proj = nn.Linear(dim, int(dim // 2))  
         self.proj_drop = nn.Dropout(proj_drop)
 
     def forward(self, x):
@@ -249,7 +249,6 @@ class UnetrUpBlock(nn.Module):
         # 4 feature resolution stages, each consisting of multiple residual blocks
         self.decoder_block = nn.ModuleList()
 
-        # If this is the last decoder, use ConvBlock(UnetResBlock) instead of EPA_Block (see suppl. material in the paper)
         if conv_decoder == True:
             self.decoder_block.append(
                 UnetResBlock(spatial_dims, out_channels, out_channels, kernel_size=kernel_size, stride=1,
