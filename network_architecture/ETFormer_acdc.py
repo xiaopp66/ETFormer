@@ -11,8 +11,12 @@ from ETFormer.network_architecture.dynunet_block import get_conv_layer, UnetResB
 
 einops, _ = optional_import("einops")
 
+class TransformerBlock(nn.Module):
+    """
+    A transformer block, based on: "Shaker et al.,
+    UNETR++: Delving into Efficient and Accurate 3D Medical Image Segmentation"
+    """
 
-class EfficientTransformerBlock(nn.Module):
     def __init__(
             self,
             input_size: int,
@@ -48,10 +52,12 @@ class EfficientTransformerBlock(nn.Module):
 
         #MEA
         self.mea_block = Mul_External_Attention(input_size=input_size, dim=hidden_size, proj_size=proj_size,
-                                                num_heads=4,qkv_bias=False, attn_drop=0., proj_drop=0.)
+                                                num_heads=4, qkv_bias=False, attn_drop=0., proj_drop=0.)
+
         self.conv51 = UnetResBlock(3, hidden_size, hidden_size, kernel_size=3, stride=1, norm_name="batch")
         self.conv52 = UnetResBlock(3, hidden_size, hidden_size, kernel_size=3, stride=1, norm_name="batch")
         self.conv8 = nn.Sequential(nn.Dropout3d(0.1, False), nn.Conv3d(hidden_size, hidden_size, 1))
+
 
         self.pos_embed = None
         if pos_embed:
@@ -69,63 +75,63 @@ class EfficientTransformerBlock(nn.Module):
         attn = self.conv51(attn_skip)
         attn = self.conv52(attn)
         x = attn_skip + self.conv8(attn)
+
         return x
 
 
 class Mul_External_Attention(nn.Module):
-    def __init__(self, input_size, dim, proj_size, num_heads=4, qkv_bias=False, attn_drop=0., proj_drop=0.):
+    def __init__(self, input_size, dim, proj_size, num_heads=4, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.):
         super().__init__()
-        self.num_heads = num_heads
+        self.num_heads = num_heads   #4
         assert dim % num_heads == 0
-        self.trans_dims = nn.Linear(dim, dim,bias=False)
+        self.trans_dims = nn.Linear(dim, dim,bias=False)  #(32,32)
 
+        # 交互q值的映射
+        self.E = nn.Linear(dim, dim, bias=qkv_bias)
 
-        #CMEA
-        self.linear_0 = nn.Linear(int(dim//self.num_heads),dim*2)
-        self.linear_1 = nn.Linear(dim*2,int(dim//self.num_heads))
+        #CA
+        self.linear_0 = nn.Linear(int(dim//self.num_heads),int(dim*2))
+        self.linear_1 = nn.Linear(int(dim*2),int(dim//self.num_heads))
 
-        # SMEA
+        # SA
         self.linear_2 = nn.Linear(input_size, proj_size)
         self.linear_3 = nn.Linear(proj_size, input_size)
 
-        #交互q值的映射
-        self.E = nn.Linear(dim, dim, bias=qkv_bias)
-
         self.attn_drop = nn.Dropout(attn_drop)
-        self.proj = nn.Linear(dim, int(dim//2))
+        self.proj = nn.Linear(dim, int(dim//2))  #(32,16)
         self.proj_drop = nn.Dropout(proj_drop)
 
 
     def forward(self, x):
         B, N, C = x.shape
 
-        x = self.trans_dims(x)
+        x = self.trans_dims(x)  # B, N, C  (2,25600,32)
         x_s=x
-        x = x.view(B, N, self.num_heads, C//self.num_heads).permute(0, 2, 1, 3)
+        x = x.view(B, N, self.num_heads, C//self.num_heads).permute(0, 2, 1, 3)  #  (2,4,25600,8)
 
-        attn = self.linear_0(x)
+        attn = self.linear_0(x)   #(2,16,25600,64),注意力系数
 
-        #CMEA
+        #CA
         attn_CA = attn.softmax(dim=-2)
-        attn_CA = attn_CA / (1e-9 +attn_CA.sum(dim=-1, keepdim=True))
+        attn_CA = attn_CA / (1e-9 +attn_CA.sum(dim=-1, keepdim=True)) #分别在行和列作归一化处理
         attn_CA = self.attn_drop(attn_CA)
-        x_CA= self.linear_1(attn_CA).permute(0, 2, 1, 3).reshape(B, N, -1)
+        x_CA= self.linear_1(attn_CA).permute(0, 2, 1, 3).reshape(B, N, -1)  #(2,25600,32) ,更新权重系数生成特征图
 
-        x_CA = self.proj(x_CA)
+        x_CA = self.proj(x_CA)  #(2,25600,16)
         x_CA = self.proj_drop(x_CA)
 
         # 交互的q
-        q_s = self.E(x_s)
-        q_s = q_s.view(B, N, self.num_heads, C//self.num_heads).permute(0, 2, 3, 1)
+        q_s = self.E(x_s) #(2,25600,32)
+        q_s = q_s.view(B, N, self.num_heads, C//self.num_heads).permute(0, 2, 3, 1)  #  (2,4,8,25600)
 
-        #SMEA
+        #SA
         attn_SA = self.linear_2(q_s) #(2,4,8,32)
         attn_SA = attn_SA.softmax(dim=-2)
         attn_SA =attn_SA / (1e-9 + attn_SA.sum(dim=-1, keepdim=True))
         attn_SA = self.attn_drop(attn_SA)
-        x_SA= self.linear_3(attn_SA).permute(0, 2, 3, 1).reshape(B, N, -1)
+        x_SA= self.linear_3(attn_SA).permute(0, 2, 3, 1).reshape(B, N, -1) #(2,25600,32)
 
-        x_SA = self.proj(x_SA)
+        x_SA = self.proj(x_SA)  #(2,25600,16)
         x_SA = self.proj_drop(x_SA)
 
         # 输出拼接
@@ -134,10 +140,40 @@ class Mul_External_Attention(nn.Module):
         return out
 
 
-class ETFormerEncoder(nn.Module):
+class PPCD(nn.Module):
+    def __init__(self,dim,atrous_rate):
+        super().__init__()
+
+        self.dc_block = nn.Sequential(
+            nn.Conv3d(dim,dim,kernel_size=3,padding=atrous_rate,dilation=atrous_rate,bias=False),
+            nn.BatchNorm3d(dim),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(in_channels=dim, out_channels=dim, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm3d(dim),
+            nn.ReLU(inplace=True)
+        )
+
+        self.maxpool = nn.MaxPool3d(2)
+        self.cbr = nn.Sequential(
+            nn.Conv3d(int(dim*2), int(dim*2), kernel_size=3,padding=atrous_rate,dilation=atrous_rate, bias=False),
+            nn.BatchNorm3d(int(dim*2)),
+            nn.ReLU(inplace=True)
+        )
+    def forward(self,x):
+
+        res = self.maxpool(x)
+        x = self.dc_block(x)
+        x_s = torch.cat((x,res),dim=1)
+        out = self.cbr(x_s)
+
+        return out
+
+
+
+class UnetrPPEncoder(nn.Module):
     def __init__(self, input_size=[16 * 40 * 40, 8 * 20 * 20, 4 * 10 * 10, 2 * 5 * 5], dims=[32, 64, 128, 256],
                  proj_size=[64, 64, 64, 32], depths=[3, 3, 3, 3], num_heads=4, spatial_dims=3, in_channels=1,
-                 dropout=0.0, transformer_dropout_rate=0.1, **kwargs):
+                 dropout=0.0, transformer_dropout_rate=0.1, atrous_rate=[2,4,6],**kwargs):
         super().__init__()
 
         self.downsample_layers = nn.ModuleList()  # stem and 3 intermediate downsampling conv layers
@@ -149,8 +185,9 @@ class ETFormerEncoder(nn.Module):
         self.downsample_layers.append(stem_layer)
         for i in range(3):
             downsample_layer = nn.Sequential(
-                get_conv_layer(spatial_dims, dims[i], dims[i + 1], kernel_size=(2, 2, 2), stride=(2, 2, 2),
-                               dropout=dropout, conv_only=True, ),
+                # get_conv_layer(spatial_dims, dims[i], dims[i + 1], kernel_size=(2, 2, 2), stride=(2, 2, 2),
+                #                dropout=dropout, conv_only=True, ),
+                PPCD(dims[i],atrous_rate=atrous_rate[i]),
                 get_norm_layer(name=("group", {"num_groups": dims[i]}), channels=dims[i + 1]),
             )
             self.downsample_layers.append(downsample_layer)
@@ -159,7 +196,7 @@ class ETFormerEncoder(nn.Module):
         for i in range(4):
             stage_blocks = []
             for j in range(depths[i]):
-                stage_blocks.append(EfficientTransformerBlock(input_size=input_size[i], hidden_size=dims[i],
+                stage_blocks.append(TransformerBlock(input_size=input_size[i], hidden_size=dims[i],
                                                      proj_size=proj_size[i], num_heads=num_heads,
                                                      dropout_rate=transformer_dropout_rate, pos_embed=True))
             self.stages.append(nn.Sequential(*stage_blocks))
@@ -194,7 +231,7 @@ class ETFormerEncoder(nn.Module):
         return x, hidden_states
 
 
-class ETFormerUpBlock(nn.Module):
+class UnetrUpBlock(nn.Module):
     def __init__(
             self,
             spatial_dims: int,
@@ -235,7 +272,11 @@ class ETFormerUpBlock(nn.Module):
             is_transposed=True,
         )
 
+        # 4 feature resolution stages, each consisting of multiple residual blocks
         self.decoder_block = nn.ModuleList()
+
+        # If this is the last decoder, use ConvBlock(UnetResBlock) instead of EPA_Block
+        # (see suppl. material in the paper)
         if conv_decoder == True:
             self.decoder_block.append(
                 UnetResBlock(spatial_dims, out_channels, out_channels, kernel_size=kernel_size, stride=1,
@@ -243,7 +284,7 @@ class ETFormerUpBlock(nn.Module):
         else:
             stage_blocks = []
             for j in range(depth):
-                stage_blocks.append(EfficientTransformerBlock(input_size=out_size, hidden_size=out_channels,
+                stage_blocks.append(TransformerBlock(input_size=out_size, hidden_size=out_channels,
                                                      proj_size=proj_size, num_heads=num_heads,
                                                      dropout_rate=0.1, pos_embed=True))
             self.decoder_block.append(nn.Sequential(*stage_blocks))
@@ -267,7 +308,12 @@ class ETFormerUpBlock(nn.Module):
 
 
 
-class ETFormer(SegmentationNetwork):
+class UNETR_PP(SegmentationNetwork):
+    """
+    UNETR++ based on: "Shaker et al.,
+    UNETR++: Delving into Efficient and Accurate 3D Medical Image Segmentation"
+    """
+
     def __init__(
             self,
             in_channels: int,
@@ -316,7 +362,8 @@ class ETFormer(SegmentationNetwork):
         self.feat_size = (2, 5, 5,)
         self.hidden_size = hidden_size
 
-        self.etformer_encoder = ETFormerEncoder(dims=dims, depths=depths, num_heads=num_heads)
+        self.unetr_pp_encoder = UnetrPPEncoder(dims=dims, depths=depths, num_heads=num_heads)
+
 
         self.encoder1 = UnetResBlock(
             spatial_dims=3,
@@ -326,7 +373,7 @@ class ETFormer(SegmentationNetwork):
             stride=1,
             norm_name=norm_name,
         )
-        self.decoder5 = ETFormerUpBlock(
+        self.decoder5 = UnetrUpBlock(
             spatial_dims=3,
             in_channels=feature_size * 16,
             out_channels=feature_size * 8,
@@ -335,7 +382,7 @@ class ETFormer(SegmentationNetwork):
             norm_name=norm_name,
             out_size=4 * 10 * 10,
         )
-        self.decoder4 = ETFormerUpBlock(
+        self.decoder4 = UnetrUpBlock(
             spatial_dims=3,
             in_channels=feature_size * 8,
             out_channels=feature_size * 4,
@@ -344,7 +391,7 @@ class ETFormer(SegmentationNetwork):
             norm_name=norm_name,
             out_size=8 * 20 * 20,
         )
-        self.decoder3 = ETFormerUpBlock(
+        self.decoder3 = UnetrUpBlock(
             spatial_dims=3,
             in_channels=feature_size * 4,
             out_channels=feature_size * 2,
@@ -353,7 +400,7 @@ class ETFormer(SegmentationNetwork):
             norm_name=norm_name,
             out_size=16 * 40 * 40,
         )
-        self.decoder2 = ETFormerUpBlock(
+        self.decoder2 = UnetrUpBlock(
             spatial_dims=3,
             in_channels=feature_size * 2,
             out_channels=feature_size,
@@ -375,7 +422,7 @@ class ETFormer(SegmentationNetwork):
         return x
 
     def forward(self, x_in):
-        x_output, hidden_states = self.etformer_encoder(x_in)
+        x_output, hidden_states = self.unetr_pp_encoder(x_in)
 
         convBlock = self.encoder1(x_in)
 
@@ -398,3 +445,4 @@ class ETFormer(SegmentationNetwork):
             logits = self.out1(out)
 
         return logits
+
