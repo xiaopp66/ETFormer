@@ -10,7 +10,7 @@ from ETFormer.network_architecture.neural_network import SegmentationNetwork
 
 einops, _ = optional_import("einops")
 
-class EfficiertTransformerBlock(nn.Module):
+class EfficientTransformerBlock(nn.Module):
   
     def __init__(
             self,
@@ -182,7 +182,7 @@ class Encoder(nn.Module):
             stage_blocks = []
             for j in range(depths[i]):
                 stage_blocks.append(
-                    EfficiertTransformerBlock(input_size=input_size[i], hidden_size=dims[i], proj_size=proj_size[i],
+                    EfficientTransformerBlock(input_size=input_size[i], hidden_size=dims[i], proj_size=proj_size[i],
                                      num_heads=num_heads,
                                      dropout_rate=transformer_dropout_rate, pos_embed=True))
             self.stages.append(nn.Sequential(*stage_blocks))
@@ -268,7 +268,7 @@ class UnetrUpBlock(nn.Module):
         else:
             stage_blocks = []
             for j in range(depth):
-                stage_blocks.append(EfficiertTransformerBlock(input_size=out_size, hidden_size=out_channels, proj_size=proj_size,
+                stage_blocks.append(EfficientTransformerBlock(input_size=out_size, hidden_size=out_channels, proj_size=proj_size,
                                                      num_heads=num_heads,
                                                      dropout_rate=0.15, pos_embed=True))
             self.decoder_block.append(nn.Sequential(*stage_blocks))
