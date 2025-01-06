@@ -21,10 +21,7 @@ import torch
 from ETFormer.training.data_augmentation.data_augmentation_moreDA import get_moreDA_augmentation
 from ETFormer.training.loss_functions.deep_supervision import MultipleOutputLoss2
 from ETFormer.utilities.to_torch import maybe_to_torch, to_cuda
-# from ETFormer.network_architecture.UNETR_PP.synapse_modify.unetr_pp_mulinput_ds_multiresblock_allcbam_para_resbridge_synapse import \
-#     UNETR_PP
-from ETFormer.network_architecture.unetr_pp_synapse_new import UNETR_PP
-# from ETFormer.network_architecture.phtrans_modify.ETFormer_final_synapse import ETFormer
+from ETFormer.network_architecture.ETFormer_synapse import ETFormer
 from ETFormer.network_architecture.initialization import InitWeights_He
 from ETFormer.network_architecture.neural_network import SegmentationNetwork
 from ETFormer.training.data_augmentation.default_data_augmentation import default_2D_augmentation_params, \
@@ -165,19 +162,7 @@ class ETFormerTrainerV2_ETFormer_synapse(ETFormerTrainer_synapse):
         :return:
         """
 
-        net_conv_kernel_sizes = [[3, 3, 3], [3, 3, 3], [3, 3, 3], [3, 3, 3]]
-        # self.network = ETFormer(crop_size=self.patch_size,
-        #                         embedding_dim=self.embedding_dim,
-        #                         input_channels=self.input_channels,
-        #                         num_classes=self.num_classes,
-        #                         conv_kernel_sizes=net_conv_kernel_sizes,
-        #                         conv_op=self.conv_op,
-        #                         depths=self.depths,
-        #                         num_heads=self.num_heads,
-        #                         patch_size=self.embedding_patch_size,
-        #                         window_size=self.window_size,
-        #                         deep_supervision=self.deep_supervision)
-        self.network = UNETR_PP(in_channels=self.input_channels,
+        self.network = ETFormer(in_channels=self.input_channels,
                                 out_channels=self.num_classes,
                                 img_size=self.crop_size,
                                 feature_size=16,
